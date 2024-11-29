@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>后台管理系统</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+    <div class="admin-container">
+        <nav class="sidebar">
+            <div class="logo">
+                <h2>管理系统</h2>
+            </div>
+            <ul class="nav-links">
+                <li class="active"><a href="#dashboard"><i class="fas fa-home"></i>控制台</a></li>
+                <li><a href="#orders"><i class="fas fa-shopping-cart"></i>订单管理</a></li>
+                <li><a href="#users"><i class="fas fa-users"></i>用户管理</a></li>
+            </ul>
+        </nav>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="search-box">
+                    <input type="text" placeholder="搜索...">
+                </div>
+                <div class="admin-info">
+                    <span class="admin-name">管理员</span>
+                    <a href="#logout" class="logout-btn">退出</a>
+                </div>
+            </header>
+
+            <div class="content-area">
+                <div class="section dashboard-section active">
+                    <h2>数据概览</h2>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>今日订单</h3>
+                            <p class="stat-number">0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>待处理订单</h3>
+                            <p class="stat-number">0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>总用户数</h3>
+                            <p class="stat-number">0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>总收入</h3>
+                            <p class="stat-number">¥0.00</p>
+                        </div>
+                    </div>
+
+                    <div class="recent-orders">
+                        <h3>最新订单</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>订单ID</th>
+                                    <th>微信号</th>
+                                    <th>产品</th>
+                                    <th>课程</th>
+                                    <th>状态</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="orderTableBody">
+                                <!-- 订单数据将通过 JavaScript 动态添加 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="section orders-section">
+                    <h2>订单管理</h2>
+                    <div class="orders-list">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>订单ID</th>
+                                    <th>微信号</th>
+                                    <th>产品</th>
+                                    <th>课程</th>
+                                    <th>状态</th>
+                                    <th>创建时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fullOrderTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="section users-section">
+                    <h2>用户管理</h2>
+                    <div class="users-list">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>用户ID</th>
+                                    <th>微信号</th>
+                                    <th>注册时间</th>
+                                    <th>订单数</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 编辑订单模态框 -->
+    <div id="editOrderModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>编辑订单</h2>
+            <form id="editOrderForm">
+                <input type="hidden" id="editOrderId">
+                <div class="form-group">
+                    <label>微信号</label>
+                    <input type="text" id="editWechat" required>
+                </div>
+                <div class="form-group">
+                    <label>产品</label>
+                    <input type="text" id="editProduct" required>
+                </div>
+                <div class="form-group">
+                    <label>课程</label>
+                    <input type="text" id="editCourse" required>
+                </div>
+                <button type="submit" class="action-btn accept">保存</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://kit.fontawesome.com/your-code.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script>
+        // Firebase 配置（使用相同的配置）
+        const firebaseConfig = {
+            apiKey: "AIzaSyBQWDiU9PNgPKzBF9H8dXQhtX_NwVPQUbM",
+            authDomain: "order-system-live-2024.firebaseapp.com",
+            databaseURL: "https://order-system-live-2024-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "order-system-live-2024",
+            storageBucket: "order-system-live-2024.appspot.com",
+            messagingSenderId: "1066553752712",
+            appId: "1:1066553752712:web:5c6b0c89d0f8f7d7dd7b47"
+        };
+
+        // 初始化 Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // 监听新订单
+        database.ref('orders').on('child_added', function(snapshot) {
+            const order = snapshot.val();
+            addNewOrder(order);
+            updateStats();
+            playNotificationSound();
+        });
+
+        // 监听订单更新
+        database.ref('orders').on('child_changed', function(snapshot) {
+            const order = snapshot.val();
+            updateOrderInTables(order);
+        });
+
+        // 监听订单删除
+        database.ref('orders').on('child_removed', function(snapshot) {
+            const order = snapshot.val();
+            removeOrderFromTables(order.id);
+            updateStats();
+        });
+
+        // 处理订单状态
+        function handleOrder(orderId, action) {
+            database.ref('orders/' + orderId).update({
+                status: action
+            });
+        }
+
+        // 删除订单
+        function deleteOrder(orderId) {
+            if (confirm('确定要删除这个订单吗？')) {
+                // 添加删除动画
+                ['orderTableBody', 'fullOrderTableBody'].forEach(tableId => {
+                    const table = document.getElementById(tableId);
+                    const orderRow = table.querySelector(`tr[data-order-id="${orderId}"]`);
+                    if (orderRow) {
+                        // 添加删除动画类
+                        orderRow.classList.add('delete-animation');
+                        
+                        // 等待动画完成后删除
+                        setTimeout(() => {
+                            // 从 Firebase 删除数据
+                            database.ref('orders/' + orderId).remove()
+                                .then(() => {
+                                    orderRow.remove();
+                                    updateStatsForDeletedOrder();
+                                    showToast('订单已删除');
+                                })
+                                .catch(error => {
+                                    console.error('删除订单时出错:', error);
+                                    showToast('删除失败，请重试', 'error');
+                                });
+                        }, 300); // 动画持续时间
+                    }
+                });
+            }
+        }
+
+        // 添加提示消息函数
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            // 显示动画
+            setTimeout(() => toast.classList.add('show'), 10);
+
+            // 自动消失
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 2000);
+        }
+
+        // 更新统计数据
+        function updateStats() {
+            database.ref('orders').once('value', function(snapshot) {
+                const orders = snapshot.val() || {};
+                const stats = {
+                    todayOrders: 0,
+                    pendingOrders: 0,
+                    totalUsers: 0,
+                    totalIncome: 0
+                };
+
+                Object.values(orders).forEach(order => {
+                    if (isToday(new Date(order.timestamp))) {
+                        stats.todayOrders++;
+                    }
+                    if (order.status === 'new') {
+                        stats.pendingOrders++;
+                    }
+                });
+
+                stats.totalUsers = Object.keys(orders).length;
+                stats.totalIncome = Object.keys(orders).length * 1.3;
+
+                updateDashboardStats(stats);
+            });
+        }
+
+        function isToday(date) {
+            const today = new Date();
+            return date.getDate() === today.getDate() &&
+                date.getMonth() === today.getMonth() &&
+                date.getFullYear() === today.getFullYear();
+        }
+
+        function showNotification(title, message) {
+            if (Notification.permission === 'granted') {
+                new Notification(title, {
+                    body: message,
+                    icon: '/path/to/icon.png'
+                });
+            } else if (Notification.permission !== 'denied') {
+                Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                        showNotification(title, message);
+                    }
+                });
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            if (Notification.permission !== 'granted') {
+                Notification.requestPermission();
+            }
+        });
+
+        function updateDashboardStats(data) {
+            document.querySelector('.stat-card:nth-child(1) .stat-number').textContent = data.todayOrders;
+            document.querySelector('.stat-card:nth-child(2) .stat-number').textContent = data.pendingOrders;
+            document.querySelector('.stat-card:nth-child(3) .stat-number').textContent = data.totalUsers;
+            document.querySelector('.stat-card:nth-child(4) .stat-number').textContent = `¥${data.totalIncome}`;
+        }
+
+        function updateOrderStatus(orderId, status) {
+            ['orderTableBody', 'fullOrderTableBody'].forEach(tableId => {
+                const table = document.getElementById(tableId);
+                const orderRow = table.querySelector(`tr[data-order-id="${orderId}"]`);
+                if (orderRow) {
+                    const statusCell = orderRow.querySelector('.status-badge');
+                    statusCell.className = `status-badge ${status.toLowerCase()}`;
+                    statusCell.textContent = getStatusText(status);
+                    
+                    const actionCell = orderRow.querySelector('td:last-child');
+                    if (status === 'COMPLETED') {
+                        actionCell.innerHTML = `
+                            <span class="status-text">已完成</span>
+                            <button onclick="editOrder('${orderId}')" class="action-btn edit">编辑</button>
+                            <button onclick="deleteOrder('${orderId}')" class="action-btn delete">删除</button>
+                        `;
+                    } else if (status === 'ACCEPTED') {
+                        actionCell.innerHTML = `
+                            <button onclick="handleOrder('${orderId}', 'complete')" class="action-btn complete">完成</button>
+                            <button onclick="editOrder('${orderId}')" class="action-btn edit">编辑</button>
+                            <button onclick="deleteOrder('${orderId}')" class="action-btn delete">删除</button>
+                        `;
+                    } else if (status === 'REJECTED') {
+                        actionCell.innerHTML = `
+                            <span class="status-text">已拒绝</span>
+                            <button onclick="editOrder('${orderId}')" class="action-btn edit">编辑</button>
+                            <button onclick="deleteOrder('${orderId}')" class="action-btn delete">删除</button>
+                        `;
+                    }
+                }
+            });
+        }
+
+        function formatDateTime(date) {
+            return date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        function getStatusText(status) {
+            const statusMap = {
+                'NEW': '新订单',
+                'ACCEPTED': '已接受',
+                'REJECTED': '已拒绝',
+                'COMPLETED': '已完成'
+            };
+            return statusMap[status] || status;
+        }
+
+        function playNotificationSound() {
+            const audio = new Audio('/assets/notification.mp3');
+            audio.play();
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const navLinks = document.querySelectorAll('.nav-links li a');
+            
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    navLinks.forEach(l => l.parentElement.classList.remove('active'));
+                    this.parentElement.classList.add('active');
+                    
+                    document.querySelectorAll('.section').forEach(section => {
+                        section.classList.remove('active');
+                    });
+                    
+                    const targetId = this.getAttribute('href').substring(1);
+                    document.querySelector(`.${targetId}-section`).classList.add('active');
+                });
+            });
+
+            const modal = document.getElementById('editOrderModal');
+            const closeBtn = document.querySelector('.close');
+            const editOrderForm = document.getElementById('editOrderForm');
+
+            closeBtn.onclick = function() {
+                modal.style.display = 'none';
+            }
+
+            window.onclick = function(event) {
+                if (event.target == modal) {
+                    modal.style.display = 'none';
+                }
+            }
+
+            editOrderForm.onsubmit = function(e) {
+                e.preventDefault();
+                const orderId = document.getElementById('editOrderId').value;
+                const updatedOrder = {
+                    id: orderId,
+                    wechat: document.getElementById('editWechat').value.trim(),
+                    product: document.getElementById('editProduct').value.trim(),
+                    course: document.getElementById('editCourse').value.trim()
+                };
+
+                console.log('提交更新的订单数据:', updatedOrder);
+
+                ws.send(JSON.stringify({
+                    type: 'update_order',
+                    order: updatedOrder
+                }));
+
+                modal.style.display = 'none';
+            }
+
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'Escape') {
+                    modal.style.display = 'none';
+                }
+            });
+        });
+
+        function editOrder(orderId) {
+            const modal = document.getElementById('editOrderModal');
+            const orderRow = document.querySelector(`tr[data-order-id="${orderId}"]`);
+            
+            if (!orderRow) {
+                console.error('找不到订单行:', orderId);
+                return;
+            }
+            
+            try {
+                document.getElementById('editOrderId').value = orderId;
+                document.getElementById('editWechat').value = orderRow.cells[1].textContent.trim();
+                document.getElementById('editProduct').value = orderRow.cells[2].textContent.trim();
+                document.getElementById('editCourse').value = orderRow.cells[3].textContent.trim();
+                
+                modal.style.display = 'block';
+                
+                console.log('正在编辑订单:', orderId);
+            } catch (error) {
+                console.error('编辑订单时出错:', error);
+            }
+        }
+
+        function removeOrderFromTables(orderId) {
+            ['orderTableBody', 'fullOrderTableBody'].forEach(tableId => {
+                const table = document.getElementById(tableId);
+                const orderRow = table.querySelector(`tr[data-order-id="${orderId}"]`);
+                if (orderRow) {
+                    orderRow.remove();
+                }
+            });
+        }
+
+        function updateOrderInTables(order) {
+            ['orderTableBody', 'fullOrderTableBody'].forEach(tableId => {
+                const table = document.getElementById(tableId);
+                const orderRow = table.querySelector(`tr[data-order-id="${order.id}"]`);
+                if (orderRow) {
+                    orderRow.cells[1].textContent = order.wechat;
+                    orderRow.cells[2].textContent = order.product;
+                    orderRow.cells[3].textContent = order.course;
+                    
+                    orderRow.style.backgroundColor = '#e8f5e9';
+                    setTimeout(() => {
+                        orderRow.style.backgroundColor = '';
+                    }, 2000);
+                }
+            });
+        }
+
+        function updateStatsForDeletedOrder() {
+            const todayOrdersElement = document.querySelector('.stat-card:nth-child(1) .stat-number');
+            const pendingOrdersElement = document.querySelector('.stat-card:nth-child(2) .stat-number');
+            
+            todayOrdersElement.textContent = Math.max(0, parseInt(todayOrdersElement.textContent) - 1);
+            pendingOrdersElement.textContent = Math.max(0, parseInt(pendingOrdersElement.textContent) - 1);
+        }
+
+        // 添加订单搜索功能
+        document.querySelector('.search-box input').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const allOrders = document.querySelectorAll('#fullOrderTableBody tr');
+            
+            allOrders.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(searchTerm) ? '' : 'none';
+            });
+        });
+
+        // 添加订单导出功能
+        function exportOrders() {
+            database.ref('orders').once('value', function(snapshot) {
+                const orders = snapshot.val();
+                const csvContent = "data:text/csv;charset=utf-8," 
+                    + "订单ID,微信号,电话,产品,课程,状态,创建时间\n"
+                    + Object.values(orders).map(order => 
+                        `${order.id},${order.wechat},${order.phone},${order.product},${order.course},${order.status},${order.timestamp}`
+                    ).join("\n");
+
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", "orders.csv");
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            });
+        }
+
+        // 添加订单统计功能
+        function updateDetailedStats() {
+            database.ref('orders').once('value', function(snapshot) {
+                const orders = snapshot.val() || {};
+                const stats = {
+                    todayOrders: 0,
+                    pendingOrders: 0,
+                    completedOrders: 0,
+                    totalIncome: 0,
+                    todayIncome: 0
+                };
+
+                Object.values(orders).forEach(order => {
+                    const orderDate = new Date(order.timestamp);
+                    const isToday = orderDate.toDateString() === new Date().toDateString();
+                    
+                    if (isToday) {
+                        stats.todayOrders++;
+                        stats.todayIncome += 1.3;
+                    }
+                    if (order.status === 'new') {
+                        stats.pendingOrders++;
+                    }
+                    if (order.status === 'completed') {
+                        stats.completedOrders++;
+                    }
+                    stats.totalIncome += 1.3;
+                });
+
+                // 更新��计显示
+                updateDashboardStats(stats);
+            });
+        }
+
+        // 添加自动刷新功能
+        setInterval(updateDetailedStats, 60000); // 每分钟更新一次
+
+        // 添加订单提醒功能
+        function checkPendingOrders() {
+            database.ref('orders').orderByChild('status').equalTo('new').once('value', function(snapshot) {
+                const pendingOrders = snapshot.val();
+                if (pendingOrders && Object.keys(pendingOrders).length > 0) {
+                    showToast(`有 ${Object.keys(pendingOrders).length} 个待处理订单`, 'warning');
+                }
+            });
+        }
+
+        // 每5分钟检查一次待处理订单
+        setInterval(checkPendingOrders, 300000);
+
+        // 添加连接状态监控
+        database.ref('.info/connected').on('value', function(snap) {
+            const isConnected = snap.val();
+            if (isConnected) {
+                console.log('已连接到 Firebase');
+                // 连接成功后立即获取数据
+                updateDetailedStats();
+                checkPendingOrders();
+            } else {
+                console.log('正在连接到 Firebase...');
+                // 5秒后如果还未连接则刷新页面
+                setTimeout(() => {
+                    if (!snap.val()) {
+                        window.location.reload();
+                    }
+                }, 5000);
+            }
+        });
+    </script>
+    <script src="js/admin.js"></script>
+</body>
+</html> 
